@@ -109,6 +109,63 @@ class env:
 
         return set_seed(seed)
 
+
+    def backward(self, distance,velocity=1):
+        actions = np.zeros(12)
+        actions[0] = -velocity
+        actions = torch.unsqueeze(torch.tensor(actions,dtype=torch.float,device=self._device),dim=0)
+        if distance < 0:
+            while self._simulation_app.is_running():
+                distance += velocity
+                if distance >= 0:
+                    return True
+                self._task.pre_physics_step(actions)
+                for i in range(self._task.control_frequency_inv):
+                    self._world.step(render=self._run_sim_rendering)
+                    self.sim_frame_count += 1
+
+    def forward(self, distance,velocity=1):
+        actions = np.zeros(12)
+        actions[0] = velocity
+        actions = torch.unsqueeze(torch.tensor(actions,dtype=torch.float,device=self._device),dim=0)
+        if distance > 0:
+            while self._simulation_app.is_running():
+                distance -= velocity
+                if distance <= 0:
+                    return True
+                self._task.pre_physics_step(actions)
+                for i in range(self._task.control_frequency_inv):
+                    self._world.step(render=self._run_sim_rendering)
+                    self.sim_frame_count += 1
+    
+
+    def left_rotation(self, angle,velocity=1):
+        actions = np.zeros(12)
+        actions[2] = -velocity
+        actions = torch.unsqueeze(torch.tensor(actions,dtype=torch.float,device=self._device),dim=0)
+        if angle < 0:
+            while self._simulation_app.is_running():
+                angle += velocity
+                if angle >= 0:
+                    return True
+                self._task.pre_physics_step(actions)
+                for i in range(self._task.control_frequency_inv):
+                    self._world.step(render=self._run_sim_rendering)
+                    self.sim_frame_count += 1
+    def right_rotation(self, angle,velocity=1):
+        actions = np.zeros(12)
+        actions[2] = velocity
+        actions = torch.unsqueeze(torch.tensor(actions,dtype=torch.float,device=self._device),dim=0)
+        if angle > 0:
+            while self._simulation_app.is_running():
+                angle -= velocity
+                if angle <= 0:
+                    return True
+                self._task.pre_physics_step(actions)
+                for i in range(self._task.control_frequency_inv):
+                    self._world.step(render=self._run_sim_rendering)
+                    self.sim_frame_count += 1
+
     def step(self, action):
         """ Basic implementation for stepping simulation. 
             Can be overriden by inherited Env classes
@@ -123,14 +180,15 @@ class env:
             done(numpy.ndarray): reset/done data.
             info(dict): Dictionary of extra data.
         """
+        if action[0] > 0:
+            self.forward(action[0])
+        elif action[0] < 0:
+            self.backward(action[0])
+        elif action[1] > 0:
+            self.right_rotation(action[1])
+        elif action[1] < 0:
+            self.left_rotation(action[1])
         # pass action to task for processing
-        task_actions = torch.unsqueeze(torch.tensor(action,dtype=torch.float,device=self._device),dim=0)
-        self._task.pre_physics_step(task_actions)
-
-        # allow users to specify the control frequency through config
-        for _ in range(self._task.control_frequency_inv):
-            self._world.step(render=self._run_sim_rendering)
-            self.sim_frame_count += 1
 
         obs, rews, resets, extras = self._task.post_physics_step() # buffers of obs, reward, dones and infos. Need to be squeezed
 

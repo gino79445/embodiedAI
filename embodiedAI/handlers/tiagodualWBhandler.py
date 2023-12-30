@@ -221,13 +221,13 @@ class TiagoDualWBHandler(TiagoBaseHandler):
         jt_pos += actions*self.dt
         self.robots.set_joint_position_targets(positions=jt_pos, joint_indices=self.gripper_left_dof_idxs)
 
-    # def apply_base_actions(self, actions):
-    #     base_actions = actions.clone()
-    #      # self.robots.set_joint_velocity_targets(velocities=base_actions, joint_indices=self.base_dof_idxs)
-    #      # TEMP: Use direct joint positions
-    #     jt_pos = self.robots.get_joint_positions(joint_indices=self.base_dof_idxs, clone=True)
-    #     jt_pos += base_actions*self.dt # create new position targets
-    #     self.robots.set_joint_positions(positions=jt_pos, joint_indices=self.base_dof_idxs)
+  #  def apply_base_actions(self, actions):
+  #      base_actions = actions.clone()
+  #        # self.robots.set_joint_velocity_targets(velocities=base_actions, joint_indices=self.base_dof_idxs)
+  #        # TEMP: Use direct joint positions
+  #      jt_pos = self.robots.get_joint_positions(joint_indices=self.base_dof_idxs, clone=True)
+  #      jt_pos += base_actions*self.dt # create new position targets
+  #      self.robots.set_joint_positions(positions=jt_pos, joint_indices=self.base_dof_idxs)
     import math
     def apply_base_actions(self, actions):
         base_actions = actions.clone()

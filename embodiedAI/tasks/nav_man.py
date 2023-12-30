@@ -36,7 +36,7 @@ from embodiedAI.tasks.base.base import Base
 # from omni.isaac.core.utils.stage import add_reference_to_stage
 from omni.isaac.isaac_sensor import _isaac_sensor
 from embodiedAI.tasks.utils import scene_utils
-
+from embodiedAI.tasks.utils.usd_utils import create_area_light
 
 # Whole Body example task with holonomic robot base
 class TiagoDualWBNavman(Base):
@@ -84,7 +84,7 @@ class TiagoDualWBNavman(Base):
         self._grasp_objs_dimensions = []
         #  Contact sensor interface for collision detection:
         self._contact_sensor_interface = _isaac_sensor.acquire_contact_sensor_interface()
-        self.sence = ["Kitchen_set"]
+        #self.sence = ["Kitchen_set"]
 
         # Handler for Tiago
         self.tiago_handler = TiagoDualWBHandler(move_group=self._move_group,use_torso= False ,sim_config=self._sim_config, num_envs=self._num_envs, device=self._device)
@@ -95,8 +95,9 @@ class TiagoDualWBNavman(Base):
         import omni
         self.tiago_handler.get_robot()
          # Spawn obstacles (from ShapeNet usd models):
-        obst = scene_utils.sence(name="Kitchen_set", prim_path=self.tiago_handler.default_zero_env_path, device=self._device)
-        self._obstacles.append(obst) # Add to list of obstacles (Geometry Prims)
+        #obst = scene_utils.sence(name="Kitchen_set", prim_path=self.tiago_handler.default_zero_env_path, device=self._device)
+        #create_area_light()    
+        #self._obstacles.append(obst) # Add to list of obstacles (Geometry Prims)
         for i in range(self._num_obstacles):
             if i ==0:
                 pose = torch.tensor([0.0,50.0,0.0],device=self._device)

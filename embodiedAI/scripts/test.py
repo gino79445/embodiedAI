@@ -51,7 +51,13 @@ def parse_hydra_configs(cfg: DictConfig):
     task = initialize_task(cfg_dict, env)
     env.reset()
     episode_reward = 0
-    api = controller(env)
+
+    env.step(np.array([10,0,0,0,0,0,0,0,0,0,0,0]))
+    env.step(np.array([0,100,0,0,0,0,0,0,0,0,0,0]))
+    env.step(np.array([-100,0,0,0,0,0,0,0,0,0,0,0]))
+    env.step(np.array([120,0,0,0,0,0,0,0,0,0,0,0]))
+    env.step(np.array([0,200,0,0,0,0,0,0,0,0,0,0]))
+    #api = controller(env)
    # api.forward_backward(10)
    # api.rotation(3.14)
    # api.forward_backward(-10)
@@ -59,6 +65,6 @@ def parse_hydra_configs(cfg: DictConfig):
    # api.arm(np.array([1,0,0,-10,2,2,0]))
    # api.gripper(-5)
    # api.gripper(5)
-    api.stop()
+    #api.stop()
 if __name__ == '__main__':
     parse_hydra_configs()

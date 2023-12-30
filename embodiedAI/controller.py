@@ -3,6 +3,7 @@ class controller:
 
     def __init__(self, env):
         self.env = env
+
     def stop(self):
         actions = np.zeros(12)
         while self.env._simulation_app.is_running():

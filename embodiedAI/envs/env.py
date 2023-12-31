@@ -152,6 +152,32 @@ class env:
                 for i in range(self._task.control_frequency_inv):
                     self._world.step(render=self._run_sim_rendering)
                     self.sim_frame_count += 1
+
+    def moveArm(self, angle,velocity=1):
+        actions = np.zeros(12)
+        actions[3:10][angle > 0] = velocity
+        actions[3:10][angle < 0] = -velocity
+        actions = torch.unsqueeze(torch.tensor(actions,dtype=torch.float,device=self._device),dim=0)
+        while self._simulation_app.is_running():   
+            angle[angle < 0] = angle[angle < 0] + velocity
+            angle[angle > 0] = angle[angle > 0] - velocity
+            # Check if any element in distance has crossed zero
+            crossed_zero = np.abs(angle) < velocity
+            actions = actions.cpu().numpy()
+            actions = actions[0]
+            # Update actions[3:10] for elements that have crossed zero
+            actions[3:10][crossed_zero] = 0
+            angle[crossed_zero] = 0
+            # Break the loop if all elements have crossed zero
+            if np.all(crossed_zero):
+                break
+            actions = torch.unsqueeze(torch.tensor(actions,dtype=torch.float,device=self._device),dim=0)
+            self._task.pre_physics_step(actions)
+            for i in range(self._task.control_frequency_inv):
+                self._world.step(render=self._run_sim_rendering)
+            self.sim_frame_count += 1
+
+        return True
     def right_rotation(self, angle,velocity=1):
         actions = np.zeros(12)
         actions[2] = velocity
@@ -165,6 +191,10 @@ class env:
                 for i in range(self._task.control_frequency_inv):
                     self._world.step(render=self._run_sim_rendering)
                     self.sim_frame_count += 1
+
+    
+    
+
 
     def step(self, action):
         """ Basic implementation for stepping simulation. 
@@ -188,6 +218,8 @@ class env:
             self.right_rotation(action[1])
         elif action[1] < 0:
             self.left_rotation(action[1])
+        else:
+            self.moveArm(action[3:10])
         # pass action to task for processing
 
         obs, rews, resets, extras = self._task.post_physics_step() # buffers of obs, reward, dones and infos. Need to be squeezed

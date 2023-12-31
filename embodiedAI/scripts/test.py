@@ -52,7 +52,7 @@ def parse_hydra_configs(cfg: DictConfig):
     env.reset()
     episode_reward = 0
 
-    env.step(np.array([10,0,0,0,0,0,0,0,0,0,0,0]))
+    env.step(np.array([0,0,0,200,200,-223,2,0,0,0,0,0]))
     env.step(np.array([0,100,0,0,0,0,0,0,0,0,0,0]))
     env.step(np.array([-100,0,0,0,0,0,0,0,0,0,0,0]))
     env.step(np.array([120,0,0,0,0,0,0,0,0,0,0,0]))

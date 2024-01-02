@@ -1,7 +1,6 @@
 import torch
 import math
 
-from pxr import Usd, UsdGeom
 from embodiedAI.handlers.base.tiagohandler import TiagoBaseHandler
 #from embodiedAI.handlers.base.embodiedAIhandler import EmbodiedAIHandler
 from embodiedAI.robots.articulations.tiago_dual_holo import TiagoDualHolo
@@ -189,12 +188,9 @@ class TiagoDualWBHandler(TiagoBaseHandler):
     def apply_actions(self, actions):
         # Actions are velocity commands
         # The first three actions are the base velocities
-        action = torch.zeros(1, 13)
-        action[:, :3] = actions[:, :3]
-        action[:, 3:11] = actions[:, 3:11]
-        self.apply_base_actions(actions=action[:,:3])
-        self.apply_upper_body_actions(actions=action[:,3:11])
-        self.apply_gripper_actions(actions=action[:,11:])    
+        self.apply_base_actions(actions=actions[:,:3])
+        self.apply_upper_body_actions(actions=actions[:,3:10])
+        self.apply_gripper_actions(actions=actions[:,10:])    
 
 
     def apply_upper_body_actions(self, actions):
@@ -219,7 +215,6 @@ class TiagoDualWBHandler(TiagoBaseHandler):
             pass
     
     def apply_gripper_actions(self, actions):
-        pass
         # Apply actions as per the selected gripper_dof_idxs (move_group)
         # Velocity commands (rad/s) will be converted to next-position (rad) targets
         jt_pos = self.robots.get_joint_positions(joint_indices=self.gripper_left_dof_idxs, clone=True)
@@ -275,7 +270,6 @@ class TiagoDualWBHandler(TiagoBaseHandler):
     def set_base_positions(self, jnt_positions):
         # Set base joints to specific positions
         self.robots.set_joint_positions(positions=jnt_positions, joint_indices=self.base_dof_idxs)
-    
 
     def get_robot_obs(self):
         # return positions and velocities of upper body and base joints
@@ -289,41 +283,6 @@ class TiagoDualWBHandler(TiagoBaseHandler):
         combined_vel = self.robots.get_joint_velocities(joint_indices=self.combined_dof_idxs, clone=True)
         # Future: Add pose and velocity of end-effector from Isaac prims
         return torch.hstack((combined_pos,combined_vel))
-
-
-
-    def get_world_transform(self,prim_path):
-        """
-        Get the world transform of a USD prim at the specified path.
-
-        Args:
-            prim_path (str): The path of the prim in the USD stage.
-
-        Returns:
-            Gf.Matrix4d or None: The world transform matrix of the prim, or None if not found.
-        """
-        # Access the current stage
-        stage = Usd.Stage.Open(prim_path)
-
-        # Get the prim at the specified path
-        prim = stage.GetPrimAtPath(prim_path)
-
-        if not prim or not UsdGeom.Xformable(prim):
-            return None
-
-        xformable = UsdGeom.Xformable(prim)
-        return xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
-
-
-    def get_grasp_pos(self):
-        # return positions of gripper joints relative to the world coordinate system
-        #ee_right_pos = self.robots.get_link_world_pose(link_name=self.ee_right_prim, clone=True)
-        joint_prim = get_prim_at_path('/World/envs/env_0/TiagoDualHolo/arm_left_7_link')
-        xformable = UsdGeom.Xformable(joint_prim)
-        world_transform = xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
-
-        translation = world_transform.ExtractTranslation()
-        return (translation[0], translation[1], translation[2])
 
     def get_arms_dof_pos(self):
         # (num_envs, num_dof)

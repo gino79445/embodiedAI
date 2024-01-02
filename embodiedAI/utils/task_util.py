@@ -29,10 +29,12 @@
 
 def initialize_task(config, env, init_sim=True):
     from embodiedAI.tasks.nav_man import TiagoDualWBNavman
+    from embodiedAI.tasks.nav_manRL import TiagoDualWBNavmanRL
    
     # Mappings from strings to environments
     task_map = {
         "TiagoDualWBExample": TiagoDualWBNavman,
+        "TiagoDualWBNavman": TiagoDualWBNavmanRL
      
     }
 

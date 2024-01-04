@@ -129,9 +129,17 @@ class TiagoDualWBNavmanRL(RLTask):
         # Optional viewport for rendering in a separate viewer
         import omni.kit
         from omni.isaac.synthetic_utils import SyntheticDataHelper
-        self.viewport_window = omni.kit.viewport_legacy.get_default_viewport_window()
+       # self.viewport_window = omni.kit.viewport_legacy.get_default_viewport_window()
+       # self.sd_helper = SyntheticDataHelper()
+       # self.sd_helper.initialize(sensor_names=["rgb"], viewport=self.viewport_window)
+        # set active camera  
+        camera_path = "/World/envs/env_0/TiagoDualHolo/head_2_link/Camera"
+        stage = omni.usd.get_context().get_stage()
+        camera_prim = stage.GetPrimAtPath(camera_path)
+        viewport_interface = omni.kit.viewport_legacy.get_viewport_interface()
+        viewport_interface.get_viewport_window().set_active_camera(str(camera_prim.GetPath()))
         self.sd_helper = SyntheticDataHelper()
-        self.sd_helper.initialize(sensor_names=["rgb"], viewport=self.viewport_window)
+        self.rgb_data = self.sd_helper.get_groundtruth(["rgb"], viewport_interface.get_viewport_window())["rgb"]
 
     def post_reset(self):
         # reset that takes place when the isaac world is reset (typically happens only once)

@@ -11,11 +11,10 @@ from omni.isaac.core.utils.torch.maths import torch_rand_float, tensor_clamp
 from omni.isaac.core.utils.stage import get_current_stage
 import numpy as np
 import time
-
+import omni
 from omni.isaac.isaac_sensor import _isaac_sensor
 from omni.isaac.range_sensor._range_sensor import acquire_lidar_sensor_interface
-
-
+from omni.isaac.synthetic_utils import SyntheticDataHelper
 # Whole Body robot handler for the dual-armed Tiago robot
 class TiagoDualWBHandler(TiagoBaseHandler):
     def __init__(self, move_group, use_torso, sim_config, num_envs, device):
@@ -27,7 +26,10 @@ class TiagoDualWBHandler(TiagoBaseHandler):
         self._robot_positions = torch.tensor([0, 0, 0]) # placement of the robot in the world
         self._device = device
 
+
+    
         # Custom default values of arm joints
+
         # middle of joint ranges
         # self.arm_left_start =  torch.tensor([0.19634954, 0.19634954, 1.5708,
         #                                     0.9817477, 0.0, 0.0, 0.0], device=self._device)
@@ -65,6 +67,7 @@ class TiagoDualWBHandler(TiagoBaseHandler):
         for i in range(7):
             self._arm_left_names.append(f"arm_left_{i+1}_joint")
             self._arm_right_names.append(f"arm_right_{i+1}_joint")
+    
         
         # Future: Use end-effector link names and get their poses and velocities from Isaac
         self.ee_left_prim =  ["gripper_left_grasping_frame"]
@@ -292,37 +295,18 @@ class TiagoDualWBHandler(TiagoBaseHandler):
 
 
 
-    def get_world_transform(self,prim_path):
-        """
-        Get the world transform of a USD prim at the specified path.
-
-        Args:
-            prim_path (str): The path of the prim in the USD stage.
-
-        Returns:
-            Gf.Matrix4d or None: The world transform matrix of the prim, or None if not found.
-        """
-        # Access the current stage
-        stage = Usd.Stage.Open(prim_path)
-
-        # Get the prim at the specified path
-        prim = stage.GetPrimAtPath(prim_path)
-
-        if not prim or not UsdGeom.Xformable(prim):
-            return None
-
-        xformable = UsdGeom.Xformable(prim)
-        return xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
-
-
     def get_grasp_pos(self):
         # return positions of gripper joints relative to the world coordinate system
         #ee_right_pos = self.robots.get_link_world_pose(link_name=self.ee_right_prim, clone=True)
         joint_prim = get_prim_at_path('/World/envs/env_0/TiagoDualHolo/arm_left_7_link')
         xformable = UsdGeom.Xformable(joint_prim)
-        world_transform = xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+        # Get the world transform at the current time.
+        currentTimeCode = Usd.TimeCode.Default()
+        world_transform = xformable.ComputeLocalToWorldTransform(currentTimeCode)
+
 
         translation = world_transform.ExtractTranslation()
+        print(translation)
         return (translation[0], translation[1], translation[2])
 
     def get_arms_dof_pos(self):
@@ -364,3 +348,5 @@ class TiagoDualWBHandler(TiagoBaseHandler):
             # jt_pos[:, self.upper_body_dof_idxs] = noise
             jt_pos[:, self.upper_body_dof_idxs] += noise # Optional: Add to default instead
         self.robots.set_joint_positions(jt_pos, indices=indices)
+
+

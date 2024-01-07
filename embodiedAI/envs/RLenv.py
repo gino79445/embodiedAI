@@ -224,7 +224,11 @@ class env(Environment):
         self._task.pre_physics_step(actions)
         return True
 
-    def step(self, action):
+    def step(self, actions):
+        action = np.zeros(12) 
+        action[0:3] = actions[9:12]
+        action[3:12] = actions[0:9]
+        print(action)
         """ Basic implementation for stepping simulation. 
             Can be overriden by inherited Env classes
             to satisfy requirements of specific RL libraries. This method passes actions to task

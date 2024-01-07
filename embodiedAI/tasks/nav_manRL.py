@@ -265,31 +265,16 @@ class TiagoDualWBNavmanRL(RLTask):
             quatpose = self.tiago_handler._robot_pose
             # translate actions to np array
             actions = actions.cpu().numpy()
-            # Transform to world coordinates and orientation
-            print(f"quatpose: {quatpose}") 
-            world_coordinates, world_orientation = self.transform_to_world_coordinates(quatpose, actions[0,3:10])
-            success, ik_positions = self._ik_solver.solve_ik_pos_tiago(des_pos=world_coordinates.cpu().numpy(),
-                des_quat=world_orientation,  # Use the quaternion elements
-                pos_threshold=100,
-                angle_threshold=self._goal_ang_threshold,
-                verbose=False
-                )
-            print(f"Success: {success}")
 
              # manipulate actions
             curr_goal_pos = self._curr_goal_tf[0:3,3]
             curr_goal_quat = Rotation.from_matrix(self._curr_goal_tf[:3,:3]).as_quat()[[3, 0, 1, 2]]
-            print(f"Goal: {curr_goal_pos} {curr_goal_quat}")
             des_quat = np.array([actions[0,9],actions[0,6],actions[0,7],actions[0,8]])
             des_quat = torch.tensor(des_quat,device=self._device)
             success, ik_positions = self._ik_solver.solve_ik_pos_tiago(des_pos=actions[0,3:6], des_quat=des_quat,
                                             pos_threshold=self._goal_pos_threshold, angle_threshold=self._goal_ang_threshold, verbose=False)
-            print(f"Success: {success}")
-            print(f"wold_coordinates: {world_coordinates}")
-            print(f"wold_orientation: {world_orientation}")
-            print(f"ik_positions: {ik_positions}")
 
-            if True:
+            if success:
                 #self._is_success[0] = 1 # Can be used for reward, termination
                 # set upper body positions
                 self.tiago_handler.set_upper_body_positions(jnt_positions=torch.tensor(np.array([ik_positions]),dtype=torch.float,device=self._device))

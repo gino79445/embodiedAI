@@ -17,8 +17,8 @@ env:
   use_torso: True # Use torso joint too
   randomize_robot_on_reset: False
   # Hybrid action space
-  continous_actions: 0 # SE2 base pose
-  discrete_actions: 12 # 0 or 1 (arm activation)
+  continous_actions: 9 # SE2 base pose
+  discrete_actions: 3 # 0 or 1 (arm activation)
   # Set custom state and action space limits
   max_rot_vel: 1.0472 # in radians (default is 60 degrees per second)
   max_base_xy_vel: 1 # metres per second

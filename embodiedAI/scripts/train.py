@@ -229,6 +229,7 @@ def experiment(cfg: DictConfig = None, cfg_file_path: str = "", seed: int = 0, r
                         max_replay_size=rl_params_cfg.max_replay_size, warmup_transitions=rl_params_cfg.warmup_transitions,
                         tau=rl_params_cfg.tau, lr_alpha=rl_params_cfg.lr_alpha, temperature=rl_params_cfg.temperature, log_std_min=rl_params_cfg.log_std_min)
 
+            
             # Setup boosting (for BHyRL):
             if rl_params_cfg.prior_agents is not None:
                 prior_agents = list()

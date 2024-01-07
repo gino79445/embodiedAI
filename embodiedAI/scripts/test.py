@@ -35,9 +35,9 @@ from embodiedAI.utils.hydra_cfg.hydra_utils import *
 from embodiedAI.utils.hydra_cfg.reformat import omegaconf_to_dict, print_dict
 
 from embodiedAI.utils.task_util import initialize_task
-from embodiedAI.envs.env import env as ENV
+from embodiedAI.envs.RLenv import env as ENV
 from controller import controller 
-
+import time
 @hydra.main(config_name="config", config_path="../cfg")
 def parse_hydra_configs(cfg: DictConfig):
 
@@ -51,11 +51,13 @@ def parse_hydra_configs(cfg: DictConfig):
     task = initialize_task(cfg_dict, env)
     env.reset()
     episode_reward = 0
-    env.step(np.array([0,0,0,0,0,0,0,0,0,0,0,0]))
-#    env.step(np.array([0,0,0,200,200,-223,2,0,0,0,0,0]))
-#    env.step(np.array([0,100,0,0,0,0,0,0,0,0,0,0]))
-#    env.step(np.array([-100,0,0,0,0,0,0,0,0,0,0,0]))
-#    env.step(np.array([120,0,0,0,0,0,0,0,0,0,0,0]))
+    env.step(np.array([1,0,0,5,0.5,0,1,0,0,1,1,0]))
+    #env.step(np.array([0,1,0,0,3.14,0,0,0,0,0,0,0]))
+    #env.step(np.array([1,0,0,-5,0.5,0,1,0,0,1,1,0]))
+    env.step(np.array([0,0,1,0,0,0.3,0.3,1.3,1,0,0,0]))
+    env.step(np.array([1,0,0,-5,0.5,0,1,0,0,1,1,0]))
+   # env.step(np.array([-100,0,0,0,0,0,0,0,0,0,0,0]))
+   # env.step(np.array([120,0,0,0,0,0,0,0,0,0,0,0]))
 #    env.step(np.array([0,200,0,0,0,0,0,0,0,0,0,0]))
     #api = controller(env)
    # api.forward_backward(10)

@@ -25,8 +25,7 @@ class TiagoDualWBHandler(TiagoBaseHandler):
         self._num_envs = num_envs
         self._robot_positions = torch.tensor([0, 0, 0]) # placement of the robot in the world
         self._device = device
-
-
+        self._robot_pose = None
     
         # Custom default values of arm joints
 
@@ -122,6 +121,7 @@ class TiagoDualWBHandler(TiagoBaseHandler):
         # Optional: Apply additional articulation settings
         self._sim_config.apply_articulation_settings("TiagoDualHolo", get_prim_at_path(tiago.prim_path),
                                                           self._sim_config.parse_actor_config("TiagoDualHolo"))
+        self._robot_pose = self.get_robot_pose()
 
     # call it in setup_up_scene in Task
     def create_articulation_view(self):
@@ -192,12 +192,11 @@ class TiagoDualWBHandler(TiagoBaseHandler):
     def apply_actions(self, actions):
         # Actions are velocity commands
         # The first three actions are the base velocities
-        action = torch.zeros(1, 13)
-        action[:, :3] = actions[:, :3]
-        action[:, 3:11] = actions[:, 3:11]
-        self.apply_base_actions(actions=action[:,:3])
-        self.apply_upper_body_actions(actions=action[:,3:11])
-        self.apply_gripper_actions(actions=action[:,11:])    
+        #action[:, :3] = actions[:, :3]
+        #action[:, 3:11] = actions[:, 3:11]
+        self.apply_base_actions(actions=actions[:,:3])
+        #self.apply_upper_body_actions(actions=action[:,3:11])
+        #self.apply_gripper_actions(actions=action[:,11:])    
 
 
     def apply_upper_body_actions(self, actions):
@@ -236,8 +235,9 @@ class TiagoDualWBHandler(TiagoBaseHandler):
   #      jt_pos = self.robots.get_joint_positions(joint_indices=self.base_dof_idxs, clone=True)
   #      jt_pos += base_actions*self.dt # create new position targets
   #      self.robots.set_joint_positions(positions=jt_pos, joint_indices=self.base_dof_idxs)
-    import math
     def apply_base_actions(self, actions):
+        from pyquaternion import Quaternion
+        import math
         base_actions = actions.clone()
       
         jt_pos = self.robots.get_joint_positions(joint_indices=self.base_dof_idxs, clone=True)
@@ -252,7 +252,15 @@ class TiagoDualWBHandler(TiagoBaseHandler):
         jt_pos[1] += rotated_y * self.dt  
         jt_pos[2] += base_actions[2] * self.dt  
         
-      
+
+        current_orientation = Quaternion(axis=[0, 0, 1], radians=jt_pos[2])
+        rotation = Quaternion(axis=[0, 0, 1], radians=base_actions[2] * self.dt)
+        new_orientation = current_orientation * rotation
+        quatpose = np.array([jt_pos[0], jt_pos[1], 0,
+                         new_orientation.real, new_orientation.imaginary[0],
+                         new_orientation.imaginary[1], new_orientation.imaginary[2]])
+        self._robot_pose = quatpose
+
         self.robots.set_joint_positions(positions=jt_pos, joint_indices=self.base_dof_idxs)
 
 
@@ -294,6 +302,26 @@ class TiagoDualWBHandler(TiagoBaseHandler):
         return torch.hstack((combined_pos,combined_vel))
 
 
+    def get_robot_pose(self):
+        import pxr
+
+        robot_prim = get_prim_at_path('/World/envs/env_0/TiagoDualHolo')
+        xformable = UsdGeom.Xformable(robot_prim)
+        # Get the world transform at the current time.
+        currentTimeCode = Usd.TimeCode.Default()
+        world_transform = xformable.ComputeLocalToWorldTransform(currentTimeCode)
+        
+        # get the pose of the robot
+        vector = world_transform.ExtractTranslation()
+        rotation = world_transform.ExtractRotation()
+        quaternion = rotation.GetQuat()
+        pose = pxr.Gf.Matrix4d()
+        pose.SetRotate(quaternion)
+        pose.SetTranslate(vector)
+        quatpose = (vector[0], vector[1], vector[2], quaternion.GetReal(), quaternion.GetImaginary()[0], quaternion.GetImaginary()[1], quaternion.GetImaginary()[2])
+        quatpose = np.array(quatpose)
+        return quatpose
+
 
     def get_grasp_pos(self):
         # return positions of gripper joints relative to the world coordinate system
@@ -306,7 +334,6 @@ class TiagoDualWBHandler(TiagoBaseHandler):
 
 
         translation = world_transform.ExtractTranslation()
-        print(translation)
         return (translation[0], translation[1], translation[2])
 
     def get_arms_dof_pos(self):

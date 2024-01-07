@@ -21,7 +21,7 @@ env:
   discrete_actions: 12 # 0 or 1 (arm activation)
   # Set custom state and action space limits
   max_rot_vel: 1.0472 # in radians (default is 60 degrees per second)
-  max_base_xy_vel: 0.5 # metres per second
+  max_base_xy_vel: 1 # metres per second
   world_xy_radius: 5.0 # 5m reaching task!
   action_xy_radius: 1.0 # position control
   action_ang_lim: 3.14159265 # pi
@@ -33,8 +33,13 @@ env:
   reward_dist_weight: 0.1
   reward_noIK: -0.05
   # reward_timeout: 0.0
-  # reward_collision: -0.15
+  #  reward_collision: -0.1
+  terminate_on_collision: True 
+  reward_collision: -0.15
+    
 
+  num_obstacles: 3 # table
+  num_grasp_objects: 1 # YCB objects
   controlFrequencyInv: 2 # 60 Hz
 
 

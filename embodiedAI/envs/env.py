@@ -193,8 +193,12 @@ class env:
                     self.sim_frame_count += 1
 
     
-    
-
+    def manipulate(self, action):
+        actions = np.zeros(12)
+        actions[3:10] = action
+        actions = torch.unsqueeze(torch.tensor(actions,dtype=torch.float,device=self._device),dim=0)
+        self._task.pre_physics_step(actions)
+       
 
     def step(self, action):
         """ Basic implementation for stepping simulation. 
@@ -211,15 +215,18 @@ class env:
             info(dict): Dictionary of extra data.
         """
         if action[0] > 0:
-            self.forward(action[0])
-        elif action[0] < 0:
+            if action[3] > 0:
+                self.forward(action[3])
+            elif action[3] < 0:
+                self.backward(action[3])
             self.backward(action[0])
         elif action[1] > 0:
-            self.right_rotation(action[1])
-        elif action[1] < 0:
-            self.left_rotation(action[1])
-        else:
-            self.moveArm(action[3:10])
+            if action[4] > 0:
+                self.right_rotation(action[4])
+            elif action[4] < 0:
+                self.left_rotation(action[4])
+        elif action[2] > 0:
+            self.manipulate(action[5:12])
         # pass action to task for processing
 
         obs, rews, resets, extras = self._task.post_physics_step() # buffers of obs, reward, dones and infos. Need to be squeezed

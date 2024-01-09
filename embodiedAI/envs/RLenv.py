@@ -8,8 +8,8 @@ import os
 from mushroom_rl.core import Environment, MDPInfo
 from mushroom_rl.utils.viewer import ImageViewer
 
-RENDER_WIDTH = 1280 # 1600
-RENDER_HEIGHT = 720 # 900
+RENDER_WIDTH = 1600 # 1600
+RENDER_HEIGHT = 900 # 900
 RENDER_DT = 1.0/60.0 # 60 Hz
 
 class env(Environment):
@@ -228,7 +228,6 @@ class env(Environment):
         action = np.zeros(12) 
         action[0:3] = actions[9:12]
         action[3:12] = actions[0:9]
-        print(action)
         """ Basic implementation for stepping simulation. 
             Can be overriden by inherited Env classes
             to satisfy requirements of specific RL libraries. This method passes actions to task
@@ -261,6 +260,7 @@ class env(Environment):
         # pass action to task for processing
         obs, rews, resets, extras = self._task.post_physics_step() # buffers of obs, reward, dones and infos. Need to be squeezed
 
+        #observation = obs[0].cpu().numpy()
         observation = obs[0].cpu().numpy()
         reward = rews[0].cpu().item()
         done = resets[0].cpu().item()
@@ -272,8 +272,8 @@ class env(Environment):
         """ Resets the task and updates observations. """
         self._task.reset()
         self._world.step(render=self._run_sim_rendering)
+        #observation = self._task.get_observations().cpu().numpy()
         observation = self._task.get_observations()[0].cpu().numpy()
-
         return observation
 
     def stop(self):

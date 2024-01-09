@@ -11,7 +11,7 @@ env:
   maxEffort: 400.0
   
   gamma: 0.95
-  horizon: 10
+  horizon: 100
   # Move group to be used
   move_group: "arm_left" # String. Can be arm_left or arm_right
   use_torso: True # Use torso joint too

@@ -151,11 +151,11 @@ class TiagoDualWBNavmanRL(RLTask):
         import omni
         self.tiago_handler.get_robot()
 
-# ADD kitchen set
+        # ADD kitchen set
 #        obst = scene_utils.sence(name="Kitchen_set", prim_path=self.tiago_handler.default_zero_env_path, device=self._device)
 #        create_area_light()    
-
-
+#
+#
 #        self._obstacles.append(obst) # Add to list of obstacles (Geometry Prims)
         for i in range(self._num_obstacles):
             obst = scene_utils.spawn_obstacle(name=self._obstacle_names[i], prim_path=self.tiago_handler.default_zero_env_path, device=self._device)
@@ -191,14 +191,7 @@ class TiagoDualWBNavmanRL(RLTask):
         # Optional viewport for rendering in a separate viewer
         import omni.kit
         from omni.isaac.synthetic_utils import SyntheticDataHelper
-        camera_path = "/World/envs/env_0/TiagoDualHolo/head_2_link/Camera"
-        stage = omni.usd.get_context().get_stage()
-        camera_prim = stage.GetPrimAtPath(camera_path)
-        viewport_interface = omni.kit.viewport_legacy.get_viewport_interface()
-        viewport_interface.get_viewport_window().set_active_camera(str(camera_prim.GetPath()))
         self.sd_helper = SyntheticDataHelper()
-        self.rgb_data = self.sd_helper.get_groundtruth(["rgb"], viewport_interface.get_viewport_window())["rgb"]
-
     def post_reset(self):
         # reset that takes place when the isaac world is reset (typically happens only once)
         self.tiago_handler.post_reset()
@@ -229,29 +222,44 @@ class TiagoDualWBNavmanRL(RLTask):
         reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         if len(reset_env_ids) > 0:
             self.reset_idx(reset_env_ids)
+            
+
+        
+        #print(f"rgb_data: {self.rgb_data.shape}")
 
         # # Get robot observations
-        # robot_joint_pos = self.tiago_handler.get_robot_obs()
+        robot_joint_pos = self.tiago_handler.get_robot_obs()
         # Fill observation buffer
         # Goal: 3D pos + rot_quaternion (3+4=7)
-        
+        robot_pos = np.array([self.tiago_handler._robot_pose[0],self.tiago_handler._robot_pose[1]])
+        curr_goal_pos = self._curr_goal_tf[0:2,3]
+        # calculate the distance between robot_pos and curr_goal_pos
+        dist = torch.linalg.norm(torch.tensor(robot_pos,device=self._device).unsqueeze(dim=0) - curr_goal_pos,dim=1)
+
+
         curr_goal_pos = self._curr_goal_tf[0:3,3].unsqueeze(dim=0)
         curr_goal_quat = torch.tensor(Rotation.from_matrix(self._curr_goal_tf[:3,:3]).as_quat()[[3, 0, 1, 2]],dtype=torch.float,device=self._device).unsqueeze(dim=0)
-#        grasp_pos = self.tiago_handler.get_grasp_pos()
-#        # transform grasp tuple to tensor
-#        grasp_pos = torch.tensor(grasp_pos,device=self._device).unsqueeze(dim=0)
-#        self.obs_buf = torch.hstack((curr_goal_pos,curr_goal_quat))
-#        # caculate the distance between grasp_pos and grasp_pos
-#        dist = torch.linalg.norm(grasp_pos - self.obs_buf[:,:3],dim=1)
-#        print(f"Distance: {dist}") 
-#        print(f"Goal: {self.obs_buf}")
+        grasp_pos = self.tiago_handler.get_grasp_pos()
+        # transform grasp tuple to tensor
+        grasp_pos = torch.tensor(grasp_pos,device=self._device).unsqueeze(dim=0)
+        self.obs_buf = torch.hstack((curr_goal_pos,curr_goal_quat))
+        # caculate the distance between grasp_pos and grasp_pos
+        dist = torch.linalg.norm(grasp_pos - self.obs_buf[:,:3],dim=1)
+        #self.obs_buf = torch.tensor(self.rgb_data,device=self._device)
+        #self.rgb_data = self.sd_helper.get_groundtruth(["rgb"], self.ego_viewport.get_viewport_window())["rgb"]
+        #self.depth_data = self.sd_helper.get_groundtruth(["depth"], self.ego_viewport.get_viewport_window())["depth"]
+        #print(self.rgb_data.shape)
+        #print(self.depth_data.shape)
+        #self.obs_buf = self.obs_buf.view(-1)
         return self.obs_buf
 
     def get_render(self):
         # Get ground truth viewport rgb image
-        gt = self.sd_helper.get_groundtruth(
-            ["rgb"], self.viewport_window, verify_sensor_init=False, wait_for_sensor_data=0
-        )
+    #    gt = self.sd_helper.get_groundtruth(
+    #        ["rgb"], self.viewport_window, verify_sensor_init=False, wait_for_sensor_data=0
+    #    )
+    
+        gt = self.sd_helper.get_groundtruth(["rgb"], self.ego_viewport.get_viewport_window())
         return np.array(gt["rgb"][:, :, :3])
     
     def pre_physics_step(self, actions) -> None:
@@ -327,6 +335,7 @@ class TiagoDualWBNavmanRL(RLTask):
         # Distance reward
         prev_goal_xy_dist = self._goals_xy_dist
         curr_goal_xy_dist = torch.linalg.norm(self.obs_buf[:,:2],dim=1)
+        curr_goal_xy_dist = 0
         goal_xy_dist_reduction = torch.tensor(prev_goal_xy_dist - curr_goal_xy_dist)
         reward = self._reward_dist_weight*goal_xy_dist_reduction
         # print(f"Goal Dist reward: {reward}")

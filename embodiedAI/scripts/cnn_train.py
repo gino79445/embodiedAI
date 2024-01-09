@@ -1,3 +1,4 @@
+
 # Copyright (c) 2018-2022, NVIDIA Corporation
 # All rights reserved.
 #
@@ -54,6 +55,34 @@ from tqdm import trange
 # (Optional) Logging with Weights & biases
 # from embodiedAI.utils.wandb_utils import wandbLogger
 # import wandb
+class CNN(nn.Module):
+    def __init__(self, out):
+        super(CNN, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels=4, out_channels=16, kernel_size=3, stride=1, padding=1)
+        self.relu1 = nn.ReLU()
+        self.maxpool1 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.conv2 = nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, stride=1, padding=1)
+        self.relu2 = nn.ReLU()
+        self.maxpool2 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.fc1 = nn.Linear(716800 , 128)  # Adjust the input size based on your image dimensions
+        self.relu3 = nn.ReLU()
+        self.fc2 = nn.Linear(128, out)
+
+    def forward(self, x):
+        x= x.permute(2, 0, 1)
+        x = x.to(torch.device('cuda'))  # 將張量移動到 CUDA 設備
+        x = x.to(torch.float32)
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = self.maxpool1(x)
+        x = self.conv2(x)
+        x = self.relu2(x)
+        x = self.maxpool2(x)
+        x = x.view(1,-1)  # Flatten the tensor
+        x = self.fc1(x)
+        x = self.relu3(x)
+        x = self.fc2(x)
+        return x
 
 class CriticNetwork(nn.Module):
     def __init__(self, input_shape, output_shape, n_features, **kwargs):
@@ -61,8 +90,8 @@ class CriticNetwork(nn.Module):
 
         n_input = input_shape[-1]
         n_output = output_shape[0]
-
-        self._h1 = nn.Linear(n_input, n_features)
+        self.cnn = CNN(10)
+        self._h1 = nn.Linear(10, n_features)
         self._h2 = nn.Linear(n_features, n_features)
         self._h3 = nn.Linear(n_features, n_output)
 
@@ -74,22 +103,35 @@ class CriticNetwork(nn.Module):
                                 gain=nn.init.calculate_gain('linear'))
 
     def forward(self, state, action):
+        num_elements = state.numel()
+        if num_elements > 450*800*4:
+            tmp = state[:,:1440000]
+            state = tmp.view(450, 800, 4)
+            remaining_state = state[450*800*4:]
+        else: 
+            state = state.view(450, 800, 4)
+            remaining_state = None
+
+        state = self.cnn(state)
+        if remaining_state is not None:
+            state = torch.cat((state.view(-1), remaining_state.view(-1)))
+        state = state.view(1,-1) 
+        
         state_action = torch.cat((state.float(), action.float()), dim=1)
         features1 = F.relu(self._h1(state_action))
         features2 = F.relu(self._h2(features1))
         q = self._h3(features2)
-
+        
         return torch.squeeze(q)
 
 
 class ActorNetwork(nn.Module):
     def __init__(self, input_shape, output_shape, n_features, **kwargs):
         super(ActorNetwork, self).__init__()
-
         n_input = input_shape[-1]
         n_output = output_shape[0]
-
-        self._h1 = nn.Linear(n_input, n_features)
+        self.cnn = CNN(10)
+        self._h1 = nn.Linear(10, n_features)
         self._h2 = nn.Linear(n_features, n_features)
         self._h3 = nn.Linear(n_features, n_output)
 
@@ -101,10 +143,24 @@ class ActorNetwork(nn.Module):
                                 gain=nn.init.calculate_gain('linear'))
 
     def forward(self, state):
+        print(f"state shape: {state.shape}")
+        num_elements = state.numel()
+        if num_elements > 450*800*4:
+            tmp = state[:,:1440000]
+            state = tmp.view(450, 800, 4)
+            remaining_state = state[450*800*4:]
+        else: 
+            state = state.view(450, 800, 4)
+            remaining_state = None
+
+        state = self.cnn(state)
+        if remaining_state is not None:
+            state = torch.cat((state.view(-1), remaining_state.view(-1)))
+        state = state.view(1,-1) 
+
         features1 = F.relu(self._h1(torch.squeeze(state, 1).float()))
         features2 = F.relu(self._h2(features1))
         a = self._h3(features2)
-
         return a
 
 

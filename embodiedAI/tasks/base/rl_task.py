@@ -88,7 +88,10 @@ class RLTask(BaseTask):
         self._cloner = GridCloner(spacing=self._env_spacing)
         self._cloner.define_base_env(self.default_base_env_path)
         define_prim(self.default_zero_env_path)
+        
 
+        self.ego_viewport = None
+        
         self.cleanup()
 
     def cleanup(self) -> None:
@@ -130,7 +133,12 @@ class RLTask(BaseTask):
         viewport = omni.kit.viewport_legacy.get_default_viewport_window()
         viewport.set_camera_position("/OmniverseKit_Persp", camera_position[0], camera_position[1], camera_position[2], True)
         viewport.set_camera_target("/OmniverseKit_Persp", camera_target[0], camera_target[1], camera_target[2], True)
-
+        
+        camera_path = "/World/envs/env_0/TiagoDualHolo/head_2_link/Camera"
+        stage = omni.usd.get_context().get_stage()
+        camera_prim = stage.GetPrimAtPath(camera_path)
+        self.ego_viewport = omni.kit.viewport_legacy.get_viewport_interface()
+        self.ego_viewport.get_viewport_window().set_active_camera(str(camera_prim.GetPath()))
     @property
     def default_base_env_path(self):
         """ Retrieves default path to the parent of all env prims.
@@ -239,7 +247,7 @@ class RLTask(BaseTask):
         if self._env._world.is_playing():
             self.get_observations()
             self.get_states()
-            self.calculate_metrics()
+#            self.calculate_metrics()
             self.is_done()
             self.get_extras()
 

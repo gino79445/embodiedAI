@@ -3,14 +3,18 @@ from omni.isaac.kit import SimulationApp
 import embodiedAI
 import numpy as np
 import torch
+from omni.isaac.kit import SimulationApp
+import embodiedAI
+import numpy as np
+import torch
 import carb
 import os
 
-#from mushroom_rl.core import Environment, MDPInfo
-#from mushroom_rl.utils.viewer import ImageViewer
+from mushroom_rl.core import Environment, MDPInfo
+from mushroom_rl.utils.viewer import ImageViewer
 
-RENDER_WIDTH = 1280 # 1600
-RENDER_HEIGHT = 720 # 900
+RENDER_WIDTH = 1600 # 1600
+RENDER_HEIGHT = 900 # 900
 RENDER_DT = 1.0/60.0 # 60 Hz
 
 class env:
@@ -39,9 +43,8 @@ class env:
         self._run_sim_rendering = ((not headless) or render) # tells the simulator to also perform rendering in addition to physics
         
         # Optional ImageViewer
-        # self._viewer = ImageViewer([RENDER_WIDTH, RENDER_HEIGHT], RENDER_DT)
+        self._viewer = ImageViewer([RENDER_WIDTH, RENDER_HEIGHT], RENDER_DT)
         self.sim_frame_count = 0
-
     def set_task(self, task, backend="torch", sim_params=None, init_sim=True) -> None:
 
         """ Creates a World object and adds Task to World. 
@@ -67,6 +70,18 @@ class env:
         )
         self._world.add_task(task)
         self._task = task
+        self._num_envs = self._task.num_envs
+        # assert (self._num_envs == 1), "Mushroom Env cannot currently handle running multiple environments in parallel! Set num_envs to 1"
+
+        self.observation_space = self._task.observation_space
+        self.action_space = self._task.action_space
+        self.num_states = self._task.num_states # Optional
+        self.state_space = self._task.state_space # Optional
+        gamma = self._task._gamma
+        horizon = self._task._max_episode_length
+
+
+
 
         if init_sim:
             self._world.reset()
@@ -111,7 +126,9 @@ class env:
 
 
     def backward(self, distance,velocity=1):
-        actions = np.zeros(12)
+        actions = np.zeros(10)
+        velocity = self._task.max_base_xy_vel
+        distance = distance /(self._task._dt * self._task.max_base_xy_vel)
         actions[0] = -velocity
         actions = torch.unsqueeze(torch.tensor(actions,dtype=torch.float,device=self._device),dim=0)
         if distance < 0:
@@ -125,7 +142,9 @@ class env:
                     self.sim_frame_count += 1
 
     def forward(self, distance,velocity=1):
-        actions = np.zeros(12)
+        actions = np.zeros(10)
+        velocity = self._task.max_base_xy_vel
+        distance = distance /(self._task._dt * self._task.max_base_xy_vel)
         actions[0] = velocity
         actions = torch.unsqueeze(torch.tensor(actions,dtype=torch.float,device=self._device),dim=0)
         if distance > 0:
@@ -140,7 +159,9 @@ class env:
     
 
     def left_rotation(self, angle,velocity=1):
-        actions = np.zeros(12)
+        actions = np.zeros(10)
+        velocity = self._task.max_rot_vel
+        angle = angle /(self._task._dt * self._task.max_rot_vel)
         actions[2] = -velocity
         actions = torch.unsqueeze(torch.tensor(actions,dtype=torch.float,device=self._device),dim=0)
         if angle < 0:
@@ -152,6 +173,24 @@ class env:
                 for i in range(self._task.control_frequency_inv):
                     self._world.step(render=self._run_sim_rendering)
                     self.sim_frame_count += 1
+
+
+    def right_rotation(self, angle,velocity=1):
+        actions = np.zeros(10)
+        velocity = self._task.max_rot_vel
+        angle = angle /(self._task._dt * self._task.max_rot_vel)
+        actions[2] = velocity
+        actions = torch.unsqueeze(torch.tensor(actions,dtype=torch.float,device=self._device),dim=0)
+        if angle > 0:
+            while self._simulation_app.is_running():
+                angle -= velocity
+                if angle <= 0:
+                    return True
+                self._task.pre_physics_step(actions)
+                for i in range(self._task.control_frequency_inv):
+                    self._world.step(render=self._run_sim_rendering)
+                    self.sim_frame_count += 1
+
 
     def moveArm(self, angle,velocity=1):
         actions = np.zeros(12)
@@ -178,29 +217,19 @@ class env:
             self.sim_frame_count += 1
 
         return True
-    def right_rotation(self, angle,velocity=1):
-        actions = np.zeros(12)
-        actions[2] = velocity
-        actions = torch.unsqueeze(torch.tensor(actions,dtype=torch.float,device=self._device),dim=0)
-        if angle > 0:
-            while self._simulation_app.is_running():
-                angle -= velocity
-                if angle <= 0:
-                    return True
-                self._task.pre_physics_step(actions)
-                for i in range(self._task.control_frequency_inv):
-                    self._world.step(render=self._run_sim_rendering)
-                    self.sim_frame_count += 1
 
     
-    def manipulate(self, action):
-        actions = np.zeros(12)
+    def inverse_kinematics(self, action):
+        actions = np.zeros(10)
         actions[3:10] = action
         actions = torch.unsqueeze(torch.tensor(actions,dtype=torch.float,device=self._device),dim=0)
         self._task.pre_physics_step(actions)
-       
+        return True
 
-    def step(self, action):
+    def step(self, actions):
+        action = np.zeros(12) 
+        action[0:3] = actions[9:12]
+        action[3:12] = actions[0:9]
         """ Basic implementation for stepping simulation. 
             Can be overriden by inherited Env classes
             to satisfy requirements of specific RL libraries. This method passes actions to task
@@ -215,22 +244,25 @@ class env:
             info(dict): Dictionary of extra data.
         """
         if action[0] > 0:
+
             if action[3] > 0:
                 self.forward(action[3])
             elif action[3] < 0:
                 self.backward(action[3])
-            self.backward(action[0])
+        
         elif action[1] > 0:
+        
             if action[4] > 0:
                 self.right_rotation(action[4])
             elif action[4] < 0:
                 self.left_rotation(action[4])
+        
         elif action[2] > 0:
-            self.manipulate(action[5:12])
+            self.inverse_kinematics(action[5:12])
         # pass action to task for processing
-
         obs, rews, resets, extras = self._task.post_physics_step() # buffers of obs, reward, dones and infos. Need to be squeezed
 
+        #observation = obs[0].cpu().numpy()
         observation = obs[0].cpu().numpy()
         reward = rews[0].cpu().item()
         done = resets[0].cpu().item()
@@ -242,8 +274,8 @@ class env:
         """ Resets the task and updates observations. """
         self._task.reset()
         self._world.step(render=self._run_sim_rendering)
+        #observation = self._task.get_observations().cpu().numpy()
         observation = self._task.get_observations()[0].cpu().numpy()
-
         return observation
 
     def stop(self):
@@ -260,3 +292,4 @@ class env:
             num_envs(int): Number of environments.
         """
         return self._num_envs
+

@@ -38,7 +38,9 @@ from omni.isaac.core.utils.prims import define_prim
 from omni.isaac.cloner import GridCloner
 from embodiedAI.tasks.utils.usd_utils import create_distant_light
 import omni.kit
-
+import omni
+from pxr import UsdGeom
+from pxr import Gf
 class RLTask(BaseTask):
 
     """ This class provides a PyTorch RL-specific interface for setting up RL tasks. 
@@ -125,7 +127,7 @@ class RLTask(BaseTask):
         self._env_pos = torch.tensor(np.array(self._env_pos), device=self._device, dtype=torch.float)
         self._cloner.filter_collisions(
             self._env._world.get_physics_context().prim_path, "/World/collisions", prim_paths, collision_filter_global_paths)
-        self.set_initial_camera_params(camera_position=[10, 10, 3], camera_target=[0, 0, 0])
+        self.set_initial_camera_params(camera_position=[10, 0, 2], camera_target=[0, 0, 0])
         if self._sim_config.task_config["sim"].get("add_distant_light", True):
             create_distant_light()
     
@@ -134,11 +136,32 @@ class RLTask(BaseTask):
         viewport.set_camera_position("/OmniverseKit_Persp", camera_position[0], camera_position[1], camera_position[2], True)
         viewport.set_camera_target("/OmniverseKit_Persp", camera_target[0], camera_target[1], camera_target[2], True)
         
-        camera_path = "/World/envs/env_0/TiagoDualHolo/head_2_link/Camera"
+        #camera_path = "/World/envs/env_0/TiagoDualHolo/head_2_link/Camera"
+        #stage = omni.usd.get_context().get_stage()
+        #camera_prim = stage.GetPrimAtPath(camera_path)
+        #self.ego_viewport = omni.kit.viewport_legacy.get_viewport_interface()
+        #self.ego_viewport.get_viewport_window().set_active_camera(str(camera_prim.GetPath()))
+        
+       
         stage = omni.usd.get_context().get_stage()
-        camera_prim = stage.GetPrimAtPath(camera_path)
+        camera_path = "/World/envs/env_0/TiagoDualHolo/head_1_link/Camera2"
+        camera_prim = stage.DefinePrim(camera_path, "Camera")
+        camera = UsdGeom.Camera(camera_prim)
+        camera.GetFocalLengthAttr().Set(18)
+        UsdGeom.XformCommonAPI(camera_prim).SetTranslate((-0.9, 0, 0))
+        rotation = Gf.Vec3f(80, 0, -90)  
+        UsdGeom.XformCommonAPI(camera_prim).SetRotate(rotation)
+        # set clipping planes
+       # camera.SetClippingRangeAttr((0.01, 1000))
+
+
         self.ego_viewport = omni.kit.viewport_legacy.get_viewport_interface()
         self.ego_viewport.get_viewport_window().set_active_camera(str(camera_prim.GetPath()))
+
+
+            
+
+
     @property
     def default_base_env_path(self):
         """ Retrieves default path to the parent of all env prims.

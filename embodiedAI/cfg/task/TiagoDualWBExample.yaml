@@ -1,5 +1,6 @@
+# used to create the objec
 # used to create the object
-name: TiagoDualWBExample
+name: TiagoDualWBNavman
 
 physics_engine: ${..physics_engine}
 
@@ -11,34 +12,38 @@ env:
   maxEffort: 400.0
   
   gamma: 0.95
-  horizon: 2000
+  horizon: 100
   # Move group to be used
   move_group: "arm_left" # String. Can be arm_left or arm_right
   use_torso: True # Use torso joint too
   randomize_robot_on_reset: False
   # Hybrid action space
-  continous_actions: 3 # SE2 base pose
-  discrete_actions: 2 # 0 or 1 (arm activation)
+  continous_actions: 9 # SE2 base pose
+  discrete_actions: 3 # 0 or 1 (arm activation)
   # Set custom state and action space limits
   max_rot_vel: 1.0472 # in radians (default is 60 degrees per second)
-  max_base_xy_vel: 0.5 # metres per second
-  world_xy_radius: 4.0 # metres
-  num_obstacles: 2 # table
-  num_grasp_objects: 1 # YCB objects
+  max_base_xy_vel: 1 # metres per second
+  world_xy_radius: 5.0 # 5m reaching task!
   action_xy_radius: 1.0 # position control
   action_ang_lim: 3.14159265 # pi
   # success and rewards:
   goal_pos_thresh: 0.01 # metres
   goal_ang_thresh: 0.08726646259 # 5*np.pi/180
-  # goal_z_lim: [0.2, 1.5] # metres
+  goal_z_lim: [0.2, 1.5] # metres
   reward_success: 1.0
   reward_dist_weight: 0.1
   reward_noIK: -0.05
   # reward_timeout: 0.0
-  reward_collision: -0.1
-  terminate_on_collision: True
+  #  reward_collision: -0.1
+  terminate_on_collision: True 
+  reward_collision: -0.15
+    
 
+  num_obstacles: 3 # table
+  num_grasp_objects: 1 # YCB objects
   controlFrequencyInv: 2 # 60 Hz
+
+
 sim:
   dt: 0.0083 # 1/120 s
   use_gpu_pipeline: ${eq:${...pipeline},"gpu"}
@@ -99,3 +104,4 @@ sim:
     # per-shape
     # contact_offset: 0.02
     # rest_offset: 0.001
+

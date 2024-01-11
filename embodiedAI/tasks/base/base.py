@@ -1,3 +1,4 @@
+
 # Copyright (c) 2018-2022, NVIDIA Corporation
 # All rights reserved.
 #
@@ -18,7 +19,7 @@
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 # IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIAB
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
 # FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
 # DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
 # SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
@@ -31,19 +32,21 @@ from abc import abstractmethod
 import numpy as np
 import torch
 # from gym import spaces
+from mushroom_rl.utils.spaces import *
 from omni.isaac.core.tasks import BaseTask
 from omni.isaac.core.utils.types import ArticulationAction
 from omni.isaac.core.utils.prims import define_prim
 from omni.isaac.cloner import GridCloner
 from embodiedAI.tasks.utils.usd_utils import create_distant_light
-from embodiedAI.tasks.utils.usd_utils import create_area_light
 import omni.kit
-
+import omni
+from pxr import UsdGeom
+from pxr import Gf
 class Base(BaseTask):
 
     """ This class provides a PyTorch RL-specific interface for setting up RL tasks. 
         It includes utilities for setting up RL task related parameters,
-        cloning environments, and data colction for RL algorithms.
+        cloning environments, and data collection for RL algorithms.
     """
 
     def __init__(self, name, env, offset=None) -> None:
@@ -78,21 +81,24 @@ class Base(BaseTask):
             self._num_states = 0
 
         # initialize data spaces (defaults to gym.Box or Mushroom Box)
-#        if not hasattr(self, "action_space"):
-#            self.action_space = Box(np.ones(self.num_actions) * -1.0, np.ones(self.num_actions) * 1.0)
-#        if not hasattr(self, "observation_space"):
-#            self.observation_space = Box(np.ones(self.num_observations) * -np.Inf, np.ones(self.num_observations) * np.Inf)
-#        if not hasattr(self, "state_space"):
-#            self.state_space = Box(np.ones(self.num_states) * -np.Inf, np.ones(self.num_states) * np.Inf)
+        if not hasattr(self, "action_space"):
+            self.action_space = Box(np.ones(self.num_actions) * -1.0, np.ones(self.num_actions) * 1.0)
+        if not hasattr(self, "observation_space"):
+            self.observation_space = Box(np.ones(self.num_observations) * -np.Inf, np.ones(self.num_observations) * np.Inf)
+        if not hasattr(self, "state_space"):
+            self.state_space = Box(np.ones(self.num_states) * -np.Inf, np.ones(self.num_states) * np.Inf)
 
         self._cloner = GridCloner(spacing=self._env_spacing)
         self._cloner.define_base_env(self.default_base_env_path)
         define_prim(self.default_zero_env_path)
+        
 
-        self.canup()
+        self.ego_viewport = None
+        
+        self.cleanup()
 
-    def canup(self) -> None:
-        """ Prepares torch buffers for RL data colction."""
+    def cleanup(self) -> None:
+        """ Prepares torch buffers for RL data collection."""
 
         # prepare tensors
         self.obs_buf = torch.zeros((self._num_envs, self.num_observations), device=self._device, dtype=torch.float)
@@ -116,13 +122,13 @@ class Base(BaseTask):
         if self._sim_config.task_config["sim"].get("add_ground_plane", True):
             self._ground_plane_path = "/World/defaultGroundPlane"
             collision_filter_global_paths.append(self._ground_plane_path)
-            scene.add_ground_plane(prim_path=self._ground_plane_path, color=np.array([0.1, 0.1, 0.1]))
+            scene.add_ground_plane(prim_path=self._ground_plane_path, color=np.array([0.5, 0.1, 0.3]))
         prim_paths = self._cloner.generate_paths("/World/envs/env", self._num_envs)
         self._env_pos = self._cloner.clone(source_prim_path="/World/envs/env_0", prim_paths=prim_paths)
         self._env_pos = torch.tensor(np.array(self._env_pos), device=self._device, dtype=torch.float)
         self._cloner.filter_collisions(
             self._env._world.get_physics_context().prim_path, "/World/collisions", prim_paths, collision_filter_global_paths)
-        self.set_initial_camera_params(camera_position=[10, 10, 3], camera_target=[0, 0, 0])
+        self.set_initial_camera_params(camera_position=[10, 0, 2], camera_target=[0, 0, 0])
         if self._sim_config.task_config["sim"].get("add_distant_light", True):
             create_distant_light()
     
@@ -130,6 +136,32 @@ class Base(BaseTask):
         viewport = omni.kit.viewport_legacy.get_default_viewport_window()
         viewport.set_camera_position("/OmniverseKit_Persp", camera_position[0], camera_position[1], camera_position[2], True)
         viewport.set_camera_target("/OmniverseKit_Persp", camera_target[0], camera_target[1], camera_target[2], True)
+        
+        #camera_path = "/World/envs/env_0/TiagoDualHolo/head_2_link/Camera"
+        #stage = omni.usd.get_context().get_stage()
+        #camera_prim = stage.GetPrimAtPath(camera_path)
+        #self.ego_viewport = omni.kit.viewport_legacy.get_viewport_interface()
+        #self.ego_viewport.get_viewport_window().set_active_camera(str(camera_prim.GetPath()))
+        
+       
+        stage = omni.usd.get_context().get_stage()
+        camera_path = "/World/envs/env_0/TiagoDualHolo/head_1_link/Camera2"
+        camera_prim = stage.DefinePrim(camera_path, "Camera")
+        camera = UsdGeom.Camera(camera_prim)
+        camera.GetFocalLengthAttr().Set(18)
+        UsdGeom.XformCommonAPI(camera_prim).SetTranslate((-0.9, 0, 0))
+        rotation = Gf.Vec3f(80, 0, -90)  
+        UsdGeom.XformCommonAPI(camera_prim).SetRotate(rotation)
+        # set clipping planes
+       # camera.SetClippingRangeAttr((0.01, 1000))
+
+
+        self.ego_viewport = omni.kit.viewport_legacy.get_viewport_interface()
+        self.ego_viewport.get_viewport_window().set_active_camera(str(camera_prim.GetPath()))
+
+
+            
+
 
     @property
     def default_base_env_path(self):
@@ -216,7 +248,7 @@ class Base(BaseTask):
         self.reset_buf = torch.ones_like(self.reset_buf)
 
     def pre_physics_step(self, actions):
-        """ Optionally impmented by individual task classes to process actions.
+        """ Optionally implemented by individual task classes to process actions.
 
         Args:
             actions (torch.Tensor): Actions generated by RL policy.
@@ -239,7 +271,7 @@ class Base(BaseTask):
         if self._env._world.is_playing():
             self.get_observations()
             self.get_states()
-            self.calculate_metrics()
+#            self.calculate_metrics()
             self.is_done()
             self.get_extras()
 

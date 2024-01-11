@@ -154,9 +154,10 @@ class TiagoDualWBNavmanRL(RLTask):
         # ADD kitchen set
 #        obst = scene_utils.sence(name="Kitchen_set", prim_path=self.tiago_handler.default_zero_env_path, device=self._device)
 #        create_area_light()    
-#
-#
 #        self._obstacles.append(obst) # Add to list of obstacles (Geometry Prims)
+#        # Optional: Add contact sensors for collision detection. Covers whole body by default
+#        omni.kit.commands.execute("IsaacSensorCreateContactSensor", path="/Contact_Sensor", sensor_period=float(self._sim_config.task_config["sim"]["dt"]),
+#            parent=obst.prim_path)
         for i in range(self._num_obstacles):
             obst = scene_utils.spawn_obstacle(name=self._obstacle_names[i], prim_path=self.tiago_handler.default_zero_env_path, device=self._device)
             self._obstacles.append(obst) # Add to list of obstacles (Geometry Prims)
@@ -246,11 +247,16 @@ class TiagoDualWBNavmanRL(RLTask):
         # caculate the distance between grasp_pos and grasp_pos
         dist = torch.linalg.norm(grasp_pos - self.obs_buf[:,:3],dim=1)
         #self.obs_buf = torch.tensor(self.rgb_data,device=self._device)
-        #self.rgb_data = self.sd_helper.get_groundtruth(["rgb"], self.ego_viewport.get_viewport_window())["rgb"]
-        #self.depth_data = self.sd_helper.get_groundtruth(["depth"], self.ego_viewport.get_viewport_window())["depth"]
-        #print(self.rgb_data.shape)
-        #print(self.depth_data.shape)
-        #self.obs_buf = self.obs_buf.view(-1)
+        self.rgb_data = self.sd_helper.get_groundtruth(["rgb"], self.ego_viewport.get_viewport_window())["rgb"]
+        self.depth_data = self.sd_helper.get_groundtruth(["depth"], self.ego_viewport.get_viewport_window())["depth"]
+        # lower the resolution of depth image
+        self.depth_data = self.depth_data[::4,::4]
+        # lower the resolution of rgb image
+        self.rgb_data = self.rgb_data[::4,::4,:]
+
+        #self.obs_buf = torch.tensor(self.depth_data,device=self._device)
+        #self.obs_buf = self.obs_buf
+        #self.obs_buf = self.obs_buf.view(1,-1)
         return self.obs_buf
 
     def get_render(self):

@@ -66,7 +66,7 @@ class TiagoDualWBNavmanRL(RLTask):
         self._randomize_robot_on_reset = self._task_cfg["env"]["randomize_robot_on_reset"]
         # Choose num_obs and num_actions based on task
         # 6D goal pose only (3 pos + 4 quat = 7)
-        self._num_observations = 7
+        self._num_observations = 1000
         self._move_group = self._task_cfg["env"]["move_group"]
         self._use_torso = self._task_cfg["env"]["use_torso"]
         # Position control. Actions are base SE2 pose (3) and discrete arm activation (2)
@@ -141,8 +141,11 @@ class TiagoDualWBNavmanRL(RLTask):
         self.tiago_handler = TiagoDualWBHandler(move_group=self._move_group, use_torso=self._use_torso, sim_config=self._sim_config, num_envs=self._num_envs, device=self._device)
 
 
-
-
+        # import a RESNET model
+        self.model = torch.hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
+        self.model.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        self.model.eval()
+        self.model.to(self._device)
 
 
         RLTask.__init__(self, name, env)
@@ -253,10 +256,14 @@ class TiagoDualWBNavmanRL(RLTask):
         self.depth_data = self.depth_data[::4,::4]
         # lower the resolution of rgb image
         self.rgb_data = self.rgb_data[::4,::4,:]
-
-        #self.obs_buf = torch.tensor(self.depth_data,device=self._device)
-        #self.obs_buf = self.obs_buf
-        #self.obs_buf = self.obs_buf.view(1,-1)
+        
+        # make the value is inf to 1000
+        self.depth_data[self.depth_data == float('inf')] = 10000
+        self.obs_buf = torch.tensor(self.depth_data,device=self._device)
+        self.obs_buf = self.obs_buf.view(1,1,self.obs_buf.shape[0],self.obs_buf.shape[1])
+        self.obs_buf = self.model(self.obs_buf)
+        self.obs_buf = self.obs_buf.detach()
+        
         return self.obs_buf
 
     def get_render(self):

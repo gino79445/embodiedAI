@@ -379,3 +379,4 @@ def parse_hydra_configs_and_run_exp(cfg: DictConfig):
 
 if __name__ == '__main__':
     parse_hydra_configs_and_run_exp()
+

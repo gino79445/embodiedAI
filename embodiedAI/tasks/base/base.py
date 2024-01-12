@@ -271,7 +271,7 @@ class Base(BaseTask):
         if self._env._world.is_playing():
             self.get_observations()
             self.get_states()
-#            self.calculate_metrics()
+            self.calculate_metrics()
             self.is_done()
             self.get_extras()
 

@@ -287,6 +287,11 @@ class TiagoDualWBHandler(TiagoBaseHandler):
         # Set base joints to specific positions
         self.robots.set_joint_positions(positions=jnt_positions, joint_indices=self.base_dof_idxs)
     
+    def get_base_positions(self):
+        # Get base joints positions
+        return self.robots.get_joint_positions(joint_indices=self.base_dof_idxs, clone=True)
+
+
 
     def get_robot_obs(self):
         # return positions and velocities of upper body and base joints

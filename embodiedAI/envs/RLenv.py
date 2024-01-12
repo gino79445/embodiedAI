@@ -242,20 +242,21 @@ class env(Environment):
             info(dict): Dictionary of extra data.
         """
         if action[0] > 0:
-
+            action[3] *= 2
             if action[3] > 0:
                 self.forward(action[3])
             elif action[3] < 0:
                 self.backward(action[3])
         
         elif action[1] > 0:
-        
+            action[4] *= 3.1415
             if action[4] > 0:
                 self.right_rotation(action[4])
             elif action[4] < 0:
                 self.left_rotation(action[4])
         
         elif action[2] > 0:
+            #action[5:8] *= 1.5
             self.inverse_kinematics(action[5:12])
         # pass action to task for processing
         obs, rews, resets, extras = self._task.post_physics_step() # buffers of obs, reward, dones and infos. Need to be squeezed

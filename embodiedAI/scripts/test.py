@@ -51,9 +51,13 @@ def parse_hydra_configs(cfg: DictConfig):
     task = initialize_task(cfg_dict, env)
     env.reset()
     episode_reward = 0
-
-    env.step(np.array([-5,0,0,0,0,0,0,0,0,1,0,0]))
-    env.step(np.array([0,3.14,0,0,0,0,0,0,0,0,1,0]))
+    obs , reward, done, info = env.step(np.array([0,0,0,0,0,0,0,0,0,0,0,0]))
+    print(obs)
+    obs , reward, done, info = env.step(np.array([-10,0,0,0,0,0,0,0,0,1,0,0]))
+    print(obs)
+    obs , reward, done, info = env.step(np.array([0,3.14,0,0,0,0,0,0,0,0,1,0]))
+    print(obs)
+    env.step(np.array([0,0,obs[0],obs[1],obs[2],obs[3],obs[4],obs[5],obs[6],0,0,1]))
     env.step(np.array([0,0,0,0,1.3,1,0,0,0,0,0,1]))
     env.step(np.array([0,3.14,0,0,0,0,0,0,0,0,1,0]))
 

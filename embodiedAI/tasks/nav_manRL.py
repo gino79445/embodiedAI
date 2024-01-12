@@ -66,7 +66,7 @@ class TiagoDualWBNavmanRL(RLTask):
         self._randomize_robot_on_reset = self._task_cfg["env"]["randomize_robot_on_reset"]
         # Choose num_obs and num_actions based on task
         # 6D goal pose only (3 pos + 4 quat = 7)
-        self._num_observations = 1000
+        self._num_observations = 1007
         self._move_group = self._task_cfg["env"]["move_group"]
         self._use_torso = self._task_cfg["env"]["use_torso"]
         # Position control. Actions are base SE2 pose (3) and discrete arm activation (2)
@@ -143,7 +143,7 @@ class TiagoDualWBNavmanRL(RLTask):
 
         # import a RESNET model
         self.model = torch.hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
-        self.model.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        #self.model.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.model.eval()
         self.model.to(self._device)
 
@@ -221,50 +221,71 @@ class TiagoDualWBNavmanRL(RLTask):
         combined_orientation = torch.tensor(combined_orientation,device=self._device)
         return world_coordinates, combined_orientation
 
+
+
     def get_observations(self):
         # Handle any pending resets
         reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
         if len(reset_env_ids) > 0:
             self.reset_idx(reset_env_ids)
             
-
-        
-        #print(f"rgb_data: {self.rgb_data.shape}")
-
-        # # Get robot observations
-        robot_joint_pos = self.tiago_handler.get_robot_obs()
-        # Fill observation buffer
+    
         # Goal: 3D pos + rot_quaternion (3+4=7)
-        robot_pos = np.array([self.tiago_handler._robot_pose[0],self.tiago_handler._robot_pose[1]])
-        curr_goal_pos = self._curr_goal_tf[0:2,3]
-        # calculate the distance between robot_pos and curr_goal_pos
-        dist = torch.linalg.norm(torch.tensor(robot_pos,device=self._device).unsqueeze(dim=0) - curr_goal_pos,dim=1)
-
-
         curr_goal_pos = self._curr_goal_tf[0:3,3].unsqueeze(dim=0)
         curr_goal_quat = torch.tensor(Rotation.from_matrix(self._curr_goal_tf[:3,:3]).as_quat()[[3, 0, 1, 2]],dtype=torch.float,device=self._device).unsqueeze(dim=0)
-        grasp_pos = self.tiago_handler.get_grasp_pos()
-        # transform grasp tuple to tensor
-        grasp_pos = torch.tensor(grasp_pos,device=self._device).unsqueeze(dim=0)
         self.obs_buf = torch.hstack((curr_goal_pos,curr_goal_quat))
-        # caculate the distance between grasp_pos and grasp_pos
-        dist = torch.linalg.norm(grasp_pos - self.obs_buf[:,:3],dim=1)
-        #self.obs_buf = torch.tensor(self.rgb_data,device=self._device)
+       
+        # perceptial data
         self.rgb_data = self.sd_helper.get_groundtruth(["rgb"], self.ego_viewport.get_viewport_window())["rgb"]
         self.depth_data = self.sd_helper.get_groundtruth(["depth"], self.ego_viewport.get_viewport_window())["depth"]
         # lower the resolution of depth image
         self.depth_data = self.depth_data[::4,::4]
         # lower the resolution of rgb image
         self.rgb_data = self.rgb_data[::4,::4,:]
+        self.rgb_data = self.rgb_data[:,:,:3]
+        # depth_data 
+ #       self.depth_data[self.depth_data == float('inf')] = 10000
+ #       depth_data = torch.tensor(self.depth_data,device=self._device)
+ #       depth_data = depth_data.view(1,1,depth_data.shape[0],depth_data.shape[1])
+ #       depth_data = self.model(depth_data)
+ #       depth_data = depth_data.detach()
         
-        # make the value is inf to 1000
-        self.depth_data[self.depth_data == float('inf')] = 10000
-        self.obs_buf = torch.tensor(self.depth_data,device=self._device)
-        self.obs_buf = self.obs_buf.view(1,1,self.obs_buf.shape[0],self.obs_buf.shape[1])
-        self.obs_buf = self.model(self.obs_buf)
-        self.obs_buf = self.obs_buf.detach()
+        # rgb_data
+        rgb_data = torch.tensor(self.rgb_data,device=self._device)
+        rgb_data = rgb_data.view(1,3,rgb_data.shape[0],rgb_data.shape[1])
+        # divide by 255
+        rgb_data = rgb_data/255
+        rgb_data = self.model(rgb_data)
+        rgb_data = rgb_data.detach()
+
+
+        # Robot: 3D pos + rot_quaternion (3+4=7)
+        curr_goal_pos , curr_goal_quat = self.goal2local()
+        self.obs_buf = np.hstack((curr_goal_pos,curr_goal_quat))
+        self.obs_buf = torch.tensor(self.obs_buf,device=self._device).unsqueeze(dim=0)
+        self.obs_buf = torch.hstack((self.obs_buf,rgb_data))
         
+
         return self.obs_buf
+
+    def goal2local(self):
+        new_base_tf =  self.tiago_handler.get_base_positions()
+        cos_theta = torch.cos(new_base_tf[:,2])
+        sin_theta = torch.sin(new_base_tf[:,2])
+        rotation_matrix = torch.zeros(2, 2)
+        rotation_matrix[0, 0] = cos_theta
+        rotation_matrix[0, 1] = -sin_theta
+        rotation_matrix[1, 0] = sin_theta
+        rotation_matrix[1, 1] = cos_theta
+
+        base_tf = torch.eye(4)  
+        base_tf[0:2, 0:2] = rotation_matrix  
+        base_tf[0:2, 2] = new_base_tf[:,0:2]  
+        inv_base_tf = torch.linalg.inv(base_tf)
+        self.curr_goal_tf = torch.matmul(inv_base_tf,self._goal_tf)
+        curr_goal_pos = self.curr_goal_tf[0:3,3]
+        curr_goal_quat = Rotation.from_matrix(self.curr_goal_tf[:3,:3]).as_quat()
+        return curr_goal_pos, curr_goal_quat
 
     def get_render(self):
         # Get ground truth viewport rgb image
@@ -282,28 +303,36 @@ class TiagoDualWBNavmanRL(RLTask):
         if len(reset_env_ids) > 0:
             self.reset_idx(reset_env_ids)
          
+        self.goal2local()
         if actions[:,6] != 0:
             quatpose = self.tiago_handler._robot_pose
             # translate actions to np array
             actions = actions.cpu().numpy()
 
-             # manipulate actions
+            # manipulate actions
             curr_goal_pos = self._curr_goal_tf[0:3,3]
             curr_goal_quat = Rotation.from_matrix(self._curr_goal_tf[:3,:3]).as_quat()[[3, 0, 1, 2]]
             des_quat = np.array([actions[0,9],actions[0,6],actions[0,7],actions[0,8]])
             des_quat = torch.tensor(des_quat,device=self._device)
             success, ik_positions = self._ik_solver.solve_ik_pos_tiago(des_pos=actions[0,3:6], des_quat=des_quat,
                                             pos_threshold=self._goal_pos_threshold, angle_threshold=self._goal_ang_threshold, verbose=False)
-
+            
             if success:
-                #self._is_success[0] = 1 # Can be used for reward, termination
-                # set upper body positions
                 self.tiago_handler.set_upper_body_positions(jnt_positions=torch.tensor(np.array([ik_positions]),dtype=torch.float,device=self._device))
+            
+            curr_goal_pos = self._curr_goal_tf[0:3,3].cpu().numpy()
+            curr_goal_quat = Rotation.from_matrix(self._curr_goal_tf[:3,:3]).as_quat()[[3, 0, 1, 2]]
+            # if the distance curr_goal_pos and robot_pos is less than 0.1 and the distance between curr_goal_quat and robot_quat is less than 0.1 then success is true
+            if torch.linalg.norm(torch.tensor(curr_goal_pos,device=self._device).unsqueeze(dim=0) - actions[0,0:3],dim=1) < 0.1 and torch.linalg.norm(torch.tensor(curr_goal_quat,device=self._device).unsqueeze(dim=0) - des_quat,dim=1) < 0.1:
+                self._is_success[0] = 1 # Can be used for reward, termination
             else:
-                pass
-                #self._ik_fails[0] = 1 # Can be used for reward
+                self._ik_fails[0] = 1 
+            
+
+
         else:
             # Scale and clip the actions (velocities) before sending to robot
+            self._ik_fails[0] = 1
             actions = torch.clamp(actions, -1, 1)
             actions *= self.max_rot_vel
             actions[:,0:2] *= (self.max_base_xy_vel/self.max_rot_vel) # scale base xy velocity joint velocities
@@ -343,23 +372,62 @@ class TiagoDualWBNavmanRL(RLTask):
         self.extras[env_ids] = 0
 
 
+    def check_robot_collisions(self):
+        # Check if the robot collided with an object
+        # TODO: Parallelize
+        for obst in self._obstacles:
+            raw_readings = self._contact_sensor_interface.get_contact_sensor_raw_data(obst.prim_path + "/Contact_Sensor")
+            if raw_readings.shape[0]:                
+                for reading in raw_readings:
+                    if "Tiago" in str(self._contact_sensor_interface.decode_body_name(reading["body1"])):
+                        return True # Collision detected with some part of the robot
+                    if "Tiago" in str(self._contact_sensor_interface.decode_body_name(reading["body0"])):
+                        return True # Collision detected with some part of the robot
+        for grasp_obj in self._grasp_objs:
+            if grasp_obj == self._curr_grasp_obj: continue # Important. Exclude current target object for collision checking
+
+            raw_readings = self._contact_sensor_interface.get_contact_sensor_raw_data(grasp_obj.prim_path + "/Contact_Sensor")
+            if raw_readings.shape[0]:
+                for reading in raw_readings:
+                    if "Tiago" in str(self._contact_sensor_interface.decode_body_name(reading["body1"])):
+                        return True # Collision detected with some part of the robot
+                    if "Tiago" in str(self._contact_sensor_interface.decode_body_name(reading["body0"])):
+                        return True # Collision detected with some part of the robot
+        return False
+        
+
     def calculate_metrics(self) -> None:
         # assuming data from obs buffer is available (get_observations() called before this function)
-        # Distance reward
-        prev_goal_xy_dist = self._goals_xy_dist
-        curr_goal_xy_dist = torch.linalg.norm(self.obs_buf[:,:2],dim=1)
-        curr_goal_xy_dist = 0
-        goal_xy_dist_reduction = torch.tensor(prev_goal_xy_dist - curr_goal_xy_dist)
-        reward = self._reward_dist_weight*goal_xy_dist_reduction
-        # print(f"Goal Dist reward: {reward}")
-        self._goals_xy_dist = curr_goal_xy_dist
 
-        # IK fail reward (penalty)
-        reward += self._reward_noIK*self._ik_fails
+        robot_pos = np.array([self.tiago_handler._robot_pose[0],self.tiago_handler._robot_pose[1]])
+        curr_goal_pos = self._curr_goal_tf[0:2,3]
+        dist = torch.linalg.norm(torch.tensor(robot_pos,device=self._device).unsqueeze(dim=0) - curr_goal_pos,dim=1)
+#        if dist > 5:
+#            self._collided[0] = 1
+#            self._is_success[0] = 0
+#            reward = torch.tensor(self._reward_collision, device=self._device)
+        if(self.check_robot_collisions()): # TODO: Parallelize
+            # Collision detected. Give penalty and no other rewards
+            self._collided[0] = 1
+            self._is_success[0] = 0 # Success isn't considered in this case
+            reward = torch.tensor(self._reward_collision, device=self._device)
+        else:
+            # Distance reward
+            prev_goal_xy_dist = self._goals_xy_dist
+            curr_goal_xy_dist = torch.linalg.norm(self.obs_buf[:,:2],dim=1)
+            goal_xy_dist_reduction = (prev_goal_xy_dist - curr_goal_xy_dist).clone()
+            reward = self._reward_dist_weight*goal_xy_dist_reduction
+            self._goals_xy_dist = curr_goal_xy_dist
+            goal_xy_dist_reduction = (prev_goal_xy_dist - curr_goal_xy_dist).clone()
+            reward = self._reward_dist_weight*goal_xy_dist_reduction
+            self._goals_xy_dist = curr_goal_xy_dist
+            # IK fail reward (penalty)
+            reward += self._reward_noIK*self._ik_fails
+            # Success reward
+            reward += self._reward_success*self._is_success
 
-        # Success reward
-        reward += self._reward_success*self._is_success
-        # print(f"Total reward: {reward}")
+
+# print(f"Total reward: {reward}")
         self.rew_buf[:] = reward
         self.extras[:] = self._is_success.clone() # Track success
 
@@ -368,6 +436,8 @@ class TiagoDualWBNavmanRL(RLTask):
         # resets = torch.where(torch.abs(pole_pos) > np.pi / 2, 1, resets)
         # resets = torch.zeros(self._num_envs, dtype=int, device=self._device)
         
-        # reset if success OR if reached max episode length
-        resets = torch.where(self.progress_buf >= self._max_episode_length, 1, self._is_success)
+        # reset if success OR collided OR if reached max episode length
+        resets = self._is_success.clone()
+        resets = torch.where(self._collided.bool(), 1, resets)
+        resets = torch.where(self.progress_buf >= self._max_episode_length, 1, resets)
         self.reset_buf[:] = resets

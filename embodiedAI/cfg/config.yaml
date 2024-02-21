@@ -21,6 +21,8 @@ seed: -1
 torch_deterministic: False
 # Use the isaac sim configuration from file
 sim_app_cfg_path: "/isaac_app_configs/omni.isaac.sim.python_minimal.kit"
+
+#sim_app_cfg_path: "/isaac_app_configs/omni.isaac.sim.python.kit"
 # set the maximum number of learning iterations to train for. overrides default per-environment setting
 # max_iterations: 500
 
@@ -43,13 +45,10 @@ solver_type: 1 # 0: pgs, 1: tgs
 # test - if set, run policy in inference mode (requires setting checkpoint to load)
 test: False
 # used to set checkpoint path
-checkpoint: '' 
-# checkpoint:  '/home/gino79445/Desktop/rlmmbp/learned_robot_placement/logs/TiagoDualReaching/TiagoDualReachingBHyRL/2022-11-11-15-42-48/2022-11-11-17-28-13/agent-212.msh'
-# checkpoint:  '/home/gino79445/Desktop/rlmmbp/learned_robot_placement/logs/TiagoDualMultiObjFetching/TiagoDualMultiObjFetchingBHyRL/2023-09-22-00-36-10/2023-09-22-00-36-10/agent-300.msh'
-# checkpoint:  '/home/gino79445/Desktop/rlmmbp/learned_robot_placement/logs/TiagoDual3Obstacle/TiagoDual3ObstacleBHyRL/2023-09-25-02-54-07/2023-09-25-02-54-07/agent-276.msh'
-# checkpoint:  '/home/gino79445/Desktop/rlmmbp/learned_robot_placement/logs/TiagoDual6Obstacle/TiagoDual6ObstacleBHyRL/2023-09-27-11-04-18/2023-09-27-11-04-18/agent-300.msh'
-# checkpoint: "/home/gino79445/Desktop/Research/rlmmbp/learned_robot_placement/logs/TiagoDual9Obstacle/TiagoDual9ObstacleBHyRL/2023-10-04-01-04-24/2023-10-04-01-04-24/agent-300.msh"
-# number of seeds to run (run sequentially by default)
+
+  #checkpoint: '/home/gino79445/Desktop/Research/isaac-sim/embodiedAI/embodiedAI/logs/TiagoDualWBNavman/TiagoDualWBNavmanBHyRL/2024-01-18-20-09-29/2024-01-21-16-31-10/agent-112.msh' 
+checkpoint: ''
+  # number of seeds to run (run sequentially by default)
 num_seeds: 5
 
 # set the directory where the output files get saved

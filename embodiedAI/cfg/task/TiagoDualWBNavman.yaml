@@ -30,7 +30,7 @@ env:
   goal_ang_thresh: 0.08726646259 # 5*np.pi/180
   goal_z_lim: [0.2, 1.5] # metres
   reward_success: 1.0
-  reward_dist_weight: 0.5
+  reward_dist_weight: 0.1
   reward_noIK: -0.1
   # reward_timeout: 0.0
   #  reward_collision: -0.1

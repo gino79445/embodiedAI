@@ -19,8 +19,11 @@ from omni.isaac.core.utils.torch.rotations import euler_angles_to_quats
 
 def sence(name, prim_path, device):
     # Spawn Shapenet obstacle model from usd path
-
-    object_usd_path = os.path.join(get_usd_path(),'Props',name,'Kitchen_set.usd')
+    object_usd_path = os.path.join(get_usd_path(),'Props',name,'sample.usd')
+    print(object_usd_path)
+    if not os.path.exists(object_usd_path):
+        print("Could not find object at path: ", object_usd_path)
+        return None
     add_reference_to_stage(object_usd_path, prim_path + "/obstacle/" + name)
 
     pose = torch.tensor([0.0,0.0,0.0],device=device)

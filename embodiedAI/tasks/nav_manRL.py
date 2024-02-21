@@ -66,7 +66,7 @@ class TiagoDualWBNavmanRL(RLTask):
         self._randomize_robot_on_reset = self._task_cfg["env"]["randomize_robot_on_reset"]
         # Choose num_obs and num_actions based on task
         # 6D goal pose only (3 pos + 4 quat = 7)
-        self._num_observations = 1007
+        self._num_observations = 515
         self._move_group = self._task_cfg["env"]["move_group"]
         self._use_torso = self._task_cfg["env"]["use_torso"]
         # Position control. Actions are base SE2 pose (3) and discrete arm activation (2)
@@ -121,7 +121,7 @@ class TiagoDualWBNavmanRL(RLTask):
 
         
         # Environment object settings: (reset() randomizes the environment)
-        self._obstacle_names = ["mammut1", "godishus","mammut2","mammut3","mammut4","mammut5","mammut6","mammut7","mammut8"] # ShapeNet models in usd format
+        self._obstacle_names = ["mammut1","mammut2","mammut3","mammut4","mammut5","mammut6","mammut7","mammut8", "godishus"] # ShapeNet models in usd format
         self._tabular_obstacle_mask = [True, True,True] # Mask to denote which objects are tabular (i.e. grasp objects can be placed on them)
         self._grasp_obj_names = ["004_sugar_box", "008_pudding_box", "010_potted_meat_can", "061_foam_brick"] # YCB models in usd format
         self._num_obstacles = min(self._task_cfg["env"]["num_obstacles"],len(self._obstacle_names))
@@ -143,7 +143,12 @@ class TiagoDualWBNavmanRL(RLTask):
 
         # import a RESNET model
         self.model = torch.hub.load('pytorch/vision:v0.6.0', 'resnet18', pretrained=True)
-        #self.model.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        num_features = self.model.fc.in_features  # 获取全连接层输入特征的数量
+        import torch.nn as nn
+        self.model.fc = nn.Linear(num_features, 512)  # 替换全连接层
+
+
+        #self.model.conv1 = torch.nn.Conv2d(4, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
         self.model.eval()
         self.model.to(self._device)
 
@@ -155,10 +160,11 @@ class TiagoDualWBNavmanRL(RLTask):
         self.tiago_handler.get_robot()
 
         # ADD kitchen set
-#        obst = scene_utils.sence(name="Kitchen_set", prim_path=self.tiago_handler.default_zero_env_path, device=self._device)
+#        obst = scene_utils.sence(name="background", prim_path=self.tiago_handler.default_zero_env_path, device=self._device)
+#        scene.add(obst)
 #        create_area_light()    
 #        self._obstacles.append(obst) # Add to list of obstacles (Geometry Prims)
-#        # Optional: Add contact sensors for collision detection. Covers whole body by default
+        # Optional: Add contact sensors for collision detection. Covers whole body by default
 #        omni.kit.commands.execute("IsaacSensorCreateContactSensor", path="/Contact_Sensor", sensor_period=float(self._sim_config.task_config["sim"]["dt"]),
 #            parent=obst.prim_path)
         for i in range(self._num_obstacles):
@@ -239,29 +245,40 @@ class TiagoDualWBNavmanRL(RLTask):
         self.rgb_data = self.sd_helper.get_groundtruth(["rgb"], self.ego_viewport.get_viewport_window())["rgb"]
         self.depth_data = self.sd_helper.get_groundtruth(["depth"], self.ego_viewport.get_viewport_window())["depth"]
         # lower the resolution of depth image
-        self.depth_data = self.depth_data[::4,::4]
+        #self.depth_data = self.depth_data[::4,::4]
         # lower the resolution of rgb image
-        self.rgb_data = self.rgb_data[::4,::4,:]
+        #self.rgb_data = self.rgb_data[::4,::4,:]
         self.rgb_data = self.rgb_data[:,:,:3]
+
         # depth_data 
- #       self.depth_data[self.depth_data == float('inf')] = 10000
- #       depth_data = torch.tensor(self.depth_data,device=self._device)
- #       depth_data = depth_data.view(1,1,depth_data.shape[0],depth_data.shape[1])
- #       depth_data = self.model(depth_data)
- #       depth_data = depth_data.detach()
-        
+        self.depth_data[self.depth_data == float('inf')] = -1
+        depth_data = torch.tensor(self.depth_data,device=self._device)
+        depth_data = depth_data.view(1,1,depth_data.shape[0],depth_data.shape[1])
+
         # rgb_data
         rgb_data = torch.tensor(self.rgb_data,device=self._device)
         rgb_data = rgb_data.view(1,3,rgb_data.shape[0],rgb_data.shape[1])
         # divide by 255
-        rgb_data = rgb_data/255
+        rgb_data = rgb_data/255         
+
+        # rgbd_data
+#        rgbd_data = torch.cat((rgb_data,depth_data),dim=1)
+#        rgbd_data = rgbd_data.float()
+#        rgbd_data = self.model(rgbd_data)
+#        rgbd_data = rgbd_data.detach()
+
+
+
+#        depth_data = self.model(depth_data)
+#        depth_data = depth_data.detach()       
         rgb_data = self.model(rgb_data)
         rgb_data = rgb_data.detach()
 
 
         # Robot: 3D pos + rot_quaternion (3+4=7)
         curr_goal_pos , curr_goal_quat = self.goal2local()
-        self.obs_buf = np.hstack((curr_goal_pos,curr_goal_quat))
+        #self.obs_buf = np.hstack((curr_goal_pos,curr_goal_quat))
+        self.obs_buf = curr_goal_pos
         self.obs_buf = torch.tensor(self.obs_buf,device=self._device).unsqueeze(dim=0)
         self.obs_buf = torch.hstack((self.obs_buf,rgb_data))
         
@@ -319,20 +336,30 @@ class TiagoDualWBNavmanRL(RLTask):
             
             if success:
                 self.tiago_handler.set_upper_body_positions(jnt_positions=torch.tensor(np.array([ik_positions]),dtype=torch.float,device=self._device))
+                epos = np.zeros(3)
+                tia_base = self.tiago_handler.get_base_positions()[0,0:2].cpu().numpy()
+                epos[:2] += tia_base
+                epos += actions[0,3:6]
             
-            curr_goal_pos = self._curr_goal_tf[0:3,3].cpu().numpy()
-            curr_goal_quat = Rotation.from_matrix(self._curr_goal_tf[:3,:3]).as_quat()[[3, 0, 1, 2]]
-            # if the distance curr_goal_pos and robot_pos is less than 0.1 and the distance between curr_goal_quat and robot_quat is less than 0.1 then success is true
-            if torch.linalg.norm(torch.tensor(curr_goal_pos,device=self._device).unsqueeze(dim=0) - actions[0,0:3],dim=1) < 0.1 and torch.linalg.norm(torch.tensor(curr_goal_quat,device=self._device).unsqueeze(dim=0) - des_quat,dim=1) < 0.1:
-                self._is_success[0] = 1 # Can be used for reward, termination
-            else:
-                self._ik_fails[0] = 1 
-            
+                # distance between goal and epos
+                dist = torch.linalg.norm(torch.tensor(epos,device=self._device).unsqueeze(dim=0) - curr_goal_pos,dim=1)
+                if dist < 0.1:
+                    self._is_success[0] = 1  # Can be used for reward, termination
+                
 
+
+#            curr_goal_pos = self._curr_goal_tf[0:3,3].cpu().numpy()
+#            curr_goal_quat = Rotation.from_matrix(self._curr_goal_tf[:3,:3]).as_quat()[[3, 0, 1, 2]]
+            # if the distance curr_goal_pos and robot_pos is less than 0.1 and the distance between curr_goal_quat and robot_quat is less than 0.1 then success is true
+#            if torch.linalg.norm(torch.tensor(curr_goal_pos,device=self._device).unsqueeze(dim=0) - actions[0,0:3],dim=1) < 0.1 and torch.linalg.norm(torch.tensor(curr_goal_quat,device=self._device).unsqueeze(dim=0) - des_quat,dim=1) < 0.1:
+#                self._is_success[0] = 1 # Can be used for reward, termination
+#            else:
+#                self._ik_fails[0] = 1 
+#            
+            
 
         else:
             # Scale and clip the actions (velocities) before sending to robot
-            self._ik_fails[0] = 1
             actions = torch.clamp(actions, -1, 1)
             actions *= self.max_rot_vel
             actions[:,0:2] *= (self.max_base_xy_vel/self.max_rot_vel) # scale base xy velocity joint velocities
@@ -359,9 +386,9 @@ class TiagoDualWBNavmanRL(RLTask):
         self._curr_goal_tf = self._goal_tf.clone()
         self._goals_xy_dist = torch.linalg.norm(self._goals[:,0:2],dim=1) # distance from origin
         # Pitch visualizer by 90 degrees for aesthetics
-        goal_viz_rot = goal_rot * Rotation.from_euler("xyz", [0,np.pi/2.0,0])
-        self._goal_vizs.set_world_poses(indices=indices,positions=self._goals[env_ids,:3],
-                orientations=torch.tensor(goal_viz_rot.as_quat()[[3, 0, 1, 2]],device=self._device).unsqueeze(dim=0))
+      #  goal_viz_rot = goal_rot * Rotation.from_euler("xyz", [0,np.pi/2.0,0])
+      #   self._goal_vizs.set_world_poses(indices=indices,positions=self._goals[env_ids,:3],
+      #          orientations=torch.tensor(goal_viz_rot.as_quat()[[3, 0, 1, 2]],device=self._device).unsqueeze(dim=0))
 
         # bookkeeping
         self._is_success[env_ids] = 0
@@ -402,11 +429,11 @@ class TiagoDualWBNavmanRL(RLTask):
         robot_pos = np.array([self.tiago_handler._robot_pose[0],self.tiago_handler._robot_pose[1]])
         curr_goal_pos = self._curr_goal_tf[0:2,3]
         dist = torch.linalg.norm(torch.tensor(robot_pos,device=self._device).unsqueeze(dim=0) - curr_goal_pos,dim=1)
-#        if dist > 5:
+#        if dist > 6:
 #            self._collided[0] = 1
 #            self._is_success[0] = 0
 #            reward = torch.tensor(self._reward_collision, device=self._device)
-        if(self.check_robot_collisions()): # TODO: Parallelize
+        if(self.check_robot_collisions() ): # TODO: Parallelize
             # Collision detected. Give penalty and no other rewards
             self._collided[0] = 1
             self._is_success[0] = 0 # Success isn't considered in this case
@@ -422,7 +449,7 @@ class TiagoDualWBNavmanRL(RLTask):
             reward = self._reward_dist_weight*goal_xy_dist_reduction
             self._goals_xy_dist = curr_goal_xy_dist
             # IK fail reward (penalty)
-            reward += self._reward_noIK*self._ik_fails
+           # reward += self._reward_noIK*self._ik_fails
             # Success reward
             reward += self._reward_success*self._is_success
 
